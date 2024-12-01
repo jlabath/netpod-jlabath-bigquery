@@ -1,0 +1,3 @@
+{:min-bb-version "1.3.186"
+ :deps {jlabath/netpod {:git/url "https://github.com/jlabath/netpod"
+                        :sha "082c89a551c25f398afe19d8457cda8610663d00"}}}
