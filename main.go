@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/civil"
 	"github.com/jlabath/netpod/server/pod"
 	"google.golang.org/api/iterator"
 )
@@ -34,7 +35,29 @@ func (c *Col) MarshalJSON() ([]byte, error) {
 		} else {
 			return nil, fmt.Errorf("Failed to convert field %s to json", c.Schema.Name)
 		}
-
+	case bigquery.TimestampFieldType:
+		return json.Marshal(c.Val)
+	case bigquery.TimeFieldType:
+		if v, ok := c.Val.(civil.Time); ok {
+			str := v.String()
+			return json.Marshal(str)
+		} else {
+			return nil, fmt.Errorf("Failed to convert field %s to json", c.Schema.Name)
+		}
+	case bigquery.DateFieldType:
+		if v, ok := c.Val.(civil.Date); ok {
+			str := v.String()
+			return json.Marshal(str)
+		} else {
+			return nil, fmt.Errorf("Failed to convert field %s to json", c.Schema.Name)
+		}
+	case bigquery.DateTimeFieldType:
+		if v, ok := c.Val.(civil.DateTime); ok {
+			str := v.String()
+			return json.Marshal(str)
+		} else {
+			return nil, fmt.Errorf("Failed to convert field %s to json", c.Schema.Name)
+		}
 	default:
 		return nil, fmt.Errorf("Unsure how to convert field %s and type %s", c.Schema.Name, c.Schema.Type)
 	}
