@@ -86,6 +86,7 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 type QueryTokenResp struct {
 	Rows  []Row  `json:"rows"`
 	Token string `json:"token"`
+	JobId string `json:"job_id"`
 }
 
 func query(client *bigquery.Client) pod.Handler {
@@ -104,7 +105,7 @@ func query(client *bigquery.Client) pod.Handler {
 		q := client.Query(sql)
 		it, err := q.Read(ctx)
 		if err != nil {
-			log.Fatalf("Failed to execute query: %v", err)
+			return nil, err
 		}
 
 		// Iterate through the results
@@ -115,7 +116,7 @@ func query(client *bigquery.Client) pod.Handler {
 				break
 			}
 			if err != nil {
-				log.Fatalf("Error iterating through results: %v", err)
+				return nil, err
 			}
 
 			results = append(results, row)
@@ -131,20 +132,49 @@ func queryToken(client *bigquery.Client) pod.Handler {
 		var (
 			sql      string
 			token    string
+			jobId    string
 			pageSize int
 			results  []Row
 		)
 
-		if err := pod.DecodeArgs(args, &sql, &token, &pageSize); err != nil {
+		if err := pod.DecodeArgs(args, &sql, &jobId, &pageSize, &token); err != nil {
 			return nil, err
 		}
 
 		// Run the query
-		q := client.Query(sql)
-		it, err := q.Read(ctx)
-		if err != nil {
-			log.Fatalf("Failed to execute query: %v", err)
+		if jobId == "" {
+			q := client.Query(sql)
+			job, err := q.Run(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			// Get the job ID
+			jobId = job.ID()
 		}
+
+		// Get the job reference
+		job, err := client.JobFromID(ctx, jobId)
+		if err != nil {
+			return nil, err
+		}
+
+		// Wait for job to complete (if not already done)
+		status, err := job.Wait(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if status.Err() != nil {
+			return nil, err
+		}
+
+		// Read results with pagination
+		it, err := job.Read(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		if token != "" {
 			it.PageInfo().Token = token
 		}
@@ -158,7 +188,7 @@ func queryToken(client *bigquery.Client) pod.Handler {
 				break
 			}
 			if err != nil {
-				log.Fatalf("Error iterating through results: %v", err)
+				return nil, err
 			}
 
 			results = append(results, row)
@@ -166,6 +196,7 @@ func queryToken(client *bigquery.Client) pod.Handler {
 		resp := QueryTokenResp{
 			Token: it.PageInfo().Token,
 			Rows:  results,
+			JobId: jobId,
 		}
 		return json.Marshal(resp)
 	}
